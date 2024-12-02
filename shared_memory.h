@@ -6,7 +6,8 @@
 #include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
-
+#include <semaphore.h> 
+#include <string.h> 
 #define MAX_BUFFER_SIZE 40
 #define MAX_COMMODITY_NAME 10
 
@@ -22,7 +23,7 @@ struct shared_buffer{
 };
 
 // buffer that will point to the allocated shared memory.
-int setupSharedMemory(int buffer_size, struct shared_buffer* buffer);
+int setupSharedMemory(int buffer_size, struct shared_buffer** buffer);
 
 void cleanupSharedMemory(int shmid, struct shared_buffer* buffer);
 // The shared memory ID returned by shmget.
