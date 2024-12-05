@@ -30,6 +30,11 @@ void print_grid() {
     usleep(500000); //sleep(500000) 
 }
 
+int count_live_neigbours(start,end,i,j){
+    int count=0;
+    
+}
+
 // Function to compute next generation of Game of Life
 void* compute_next_gen(void* arg) {
     
@@ -41,6 +46,28 @@ void* compute_next_gen(void* arg) {
     for(int i=start; i<=end; i++){
         for(int j=0; j<GRID_SIZE; j++){
             //check for rules by looping over every cell 
+            if(grid[i][j]==0){
+                // if((i-1)==-1 || (j-1)==-1 || (i+1)==GRID_SIZE || (j+1)==GRID_SIZE)
+
+                //don't forget handling out of bounds grid
+                if( (grid[i][j-1]==1 && grid[i-1][j-1]==1 && grid[i-1][j]==1)
+                    || (grid[i-1][j-1]==1 && grid[i-1][j]==1 && grid[i-1][j+1]==1)
+                    || (grid[i-1][j]==1 && grid[i-1][j+1]==1 && grid[i][j+1]==1)
+                    || (grid[i-1][j+1]==1 && grid[i][j+1]==1 && grid[i+1][j+1]==1)
+                    || (grid[i][j+1]==1 && grid[i+1][j+1]==1 && grid[i+1][j]==1)
+                    || (grid[i+1][j+1]==1 && grid[i+1][j]==1 && grid[i+1][j-1]==1)
+                    || (grid[i+1][j]==1 && grid[i+1][j-1]==1 && grid[i][j-1]==1)
+                )
+                {
+                    grid[i][j]=1; //becomes alive
+                }
+            } //Birth Rule
+
+            if(grid[i][j]==1){
+                //Survival Rule
+                if()
+                //Death Rule
+            }
         }
     }
 }
