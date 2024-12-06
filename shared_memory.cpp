@@ -62,42 +62,52 @@ void cleanupSharedMemory(int shmid,struct shared_buffer* buffer)
     }
 }
 
-// Declare a semaphore variable 
-sem_t *sem;
+// Declare semaphores 
+sem_t *empty; //semaphore for the buffer size
+sem_t *mutex;//semaphore for mutual exclusion 1/0
+sem_t *full;
 
-int initializeSemaphore(int initial_value) {
-    sem = sem_open("/semaphore", O_CREAT, 0666, initial_value);
-    if (sem == SEM_FAILED) {
-        perror("Semaphore initialization failed");
+int initializeSemaphore(int buffer_size) {
+    empty = sem_open("/empty", O_CREAT, 0666, buffer_size); // to track the available slots
+    if (empty == SEM_FAILED) {
+        perror("Semaphore 'empty' initialization failed");
+        exit(1);
+    }
+
+    mutex=sem_open("/mutex", O_CREAT, 0666, 1); // to track the available slots
+    if (mutex == SEM_FAILED) {
+        perror("Semaphore 'mutex' initialization failed");
+        exit(1);
+    }
+
+    full = sem_open("/full", O_CREAT, 0666, 0); // for full slots
+    if (full == SEM_FAILED) {
+        perror("Semaphore 'full' initialization failed");
         exit(1);
     }
     return 0;
 }
 
-void semaphoreSignal() {
-    //increments the semaphore value.
-    if (sem_post(sem) == -1) {
-        perror("Semaphore signal failed");
-        exit(1);
-    }
-}
-
-void semaphoreWait() {
-    // decrements the semaphore value and blocks if the value is 0
-    if (sem_wait(sem) == -1) {
+void semaphoreWait(sem_t* semaphore) {
+    if (sem_wait(semaphore) == -1) {
         perror("Semaphore wait failed");
         exit(1);
     }
 }
 
-void cleanupSemaphore() {
-    // closes the semaphore
-    if (sem_close(sem) == -1) {
+void semaphoreSignal(sem_t* semaphore) {
+    if (sem_post(semaphore) == -1) {
+        perror("Semaphore signal failed");
+        exit(1);
+    }
+}
+
+void cleanupSemaphores() {
+    if (sem_close(empty) == -1 || sem_close(mutex) == -1|| sem_close(full) == -1) {
         perror("Semaphore close failed");
         exit(1);
     }
-    // unlinks the semaphore (removes it from the system)
-    if (sem_unlink("/semaphore") == -1) {
+    if (sem_unlink("/empty") == -1 || sem_unlink("/mutex") == -1|| sem_unlink("/full") == -1) {
         perror("Semaphore unlink failed");
         exit(1);
     }

@@ -102,12 +102,13 @@ void producer(Producer_ARGS args,struct shared_buffer* buffer)
 
         log_time((std::string(args.commodity_name) + ": generating a new value: " + std::to_string(price)).c_str());
 
-        // Wait if the buffer is full
-        // semaphoreWait();
+        // Wait for an empty slot
+        semaphoreWait(empty);
+
 
          // Wait to lock the buffer (ensure mutual exclusion)
-        log_time((std::string(args.commodity_name) + ": trying to get mutex on").c_str());
-        semaphoreWait();
+        log_time((std::string(args.commodity_name) + ": trying to get mutex on shared buffer").c_str());
+        semaphoreWait(mutex);
 
         //place the price in the buffer
         snprintf(buffer->commodities[buffer->in],MAX_COMMODITY_NAME, "%s",args.commodity_name);
@@ -123,7 +124,8 @@ void producer(Producer_ARGS args,struct shared_buffer* buffer)
         log_time((std::string(args.commodity_name) + ": placing price " + std::to_string(price) + " on shared buffer").c_str());
 
         // Signal that new data is available for consumers
-        semaphoreSignal();
+        semaphoreSignal(mutex);
+        semaphoreSignal(full);
 
         log_time((std::string(args.commodity_name) + ": sleeping for " + std::to_string(args.sleep_interval_ms) + " ms").c_str());
         //sleep_using_clock_gettime(args.sleep_interval_ms * 1000); // Sleep in milliseconds
@@ -139,7 +141,7 @@ int main(int arguments_count, char* arguments[])
     struct shared_buffer* buffer;
     // Setup shared memory
     int shmid=setupSharedMemory(MAX_BOUNDED_BUFFER_SIZE, &buffer);
-    initializeSemaphore(0);
+    initializeSemaphore(MAX_BOUNDED_BUFFER_SIZE);
 
     // Parse command-line arguments
     Producer_ARGS args = parse_arguments(arguments_count, arguments);

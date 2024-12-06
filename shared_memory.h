@@ -8,8 +8,13 @@
 #include <stdlib.h>
 #include <semaphore.h> 
 #include <string.h> 
+
 #define MAX_BUFFER_SIZE 40
 #define MAX_COMMODITY_NAME 10
+
+extern sem_t* empty; // Semaphore to track empty slots
+extern sem_t *full;
+extern sem_t* mutex; // Semaphore for mutual exclusion
 
 // to define a shared memory buffer in producer-consumer system
 struct shared_buffer{
@@ -31,9 +36,9 @@ void cleanupSharedMemory(int shmid, struct shared_buffer* buffer);
 
 int initializeSemaphore(int initial_value);
 
-void semaphoreWait();
-void semaphoreSignal();
-void cleanupSemaphore();
+void semaphoreWait(sem_t* semaphore);
+void semaphoreSignal(sem_t* semaphore);
+void cleanupSemaphores();
 
 
 
