@@ -9,6 +9,7 @@
 #define GENERATIONS 32
 
 int grid[GRID_SIZE][GRID_SIZE];
+int next_gen_grid[GRID_SIZE][GRID_SIZE];
 pthread_barrier_t barrier;
 
 typedef struct{
@@ -31,8 +32,25 @@ void print_grid() {
 }
 
 int count_live_neigbours(start,end,i,j){
-    int count=0;
-    
+    int live_count=0;
+   
+    //don't forget handling out of bounds grid
+    for(int i=start; i<=end; i++){
+        for(int j=0; j<GRID_SIZE; j++){
+            for(int hor=-1; hor<=1; hor++){
+                for(int ver=-1; ver<=1; ver++){
+                    if(i+hor>=0 || i+hor<GRID_SIZE
+                    || j+ver>=0 || j+ver<GRID_SIZE){
+                        if(next_gen_grid[i+hor][j+ver]==1){
+                            live_count++;
+                        }
+                    }
+                }
+
+            }
+        }
+    }
+    return live_count;
 }
 
 // Function to compute next generation of Game of Life
@@ -45,31 +63,31 @@ void* compute_next_gen(void* arg) {
 
     for(int i=start; i<=end; i++){
         for(int j=0; j<GRID_SIZE; j++){
-            //check for rules by looping over every cell 
-            if(grid[i][j]==0){
-                // if((i-1)==-1 || (j-1)==-1 || (i+1)==GRID_SIZE || (j+1)==GRID_SIZE)
-
-                //don't forget handling out of bounds grid
-                if( (grid[i][j-1]==1 && grid[i-1][j-1]==1 && grid[i-1][j]==1)
-                    || (grid[i-1][j-1]==1 && grid[i-1][j]==1 && grid[i-1][j+1]==1)
-                    || (grid[i-1][j]==1 && grid[i-1][j+1]==1 && grid[i][j+1]==1)
-                    || (grid[i-1][j+1]==1 && grid[i][j+1]==1 && grid[i+1][j+1]==1)
-                    || (grid[i][j+1]==1 && grid[i+1][j+1]==1 && grid[i+1][j]==1)
-                    || (grid[i+1][j+1]==1 && grid[i+1][j]==1 && grid[i+1][j-1]==1)
-                    || (grid[i+1][j]==1 && grid[i+1][j-1]==1 && grid[i][j-1]==1)
-                )
-                {
-                    grid[i][j]=1; //becomes alive
+            //birth rule
+            if(next_gen_grid[i][j]==0){
+                if(count_live_neigbours(start,end,i,j)==3){
+                    next_gen_grid[i][j]=1;
                 }
-            } //Birth Rule
+                else{
+                    next_gen_grid[i][j]=0;
+                }     
+            }
 
-            if(grid[i][j]==1){
+            if(next_gen_grid[i][j]==1){
+                int live_count=count_live_neigbours(start,end,i,j);
                 //Survival Rule
-                if()
+                if(live_count==2|| live_count==3){
+                    next_gen_grid[i][j]=1;
+                }
                 //Death Rule
+                if(live_count<2 || live_count>3){
+                    next_gen_grid[i][j]=0;
+                }
             }
         }
     }
+    
+    
 }
 
 
