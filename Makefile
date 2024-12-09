@@ -5,7 +5,7 @@ CC = g++ -g
 OBJECTS1 = producer.o shared_memory.o
 OBJECTS2 = consumer.o shared_memory.o
 
-all:producer
+all:producer consumer
 
 # Compile shared_memory.c into an object file
 shared_memory.o: shared_memory.cpp shared_memory.h

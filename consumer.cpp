@@ -1,6 +1,7 @@
 #include <iostream>
 #include <vector>
 #include <string.h>
+#include <thread>
 #include "shared_memory.h"
 
 #define MAX_BOUNDED_BUFFER_SIZE 40
@@ -40,17 +41,21 @@ void displayTable(std::vector<commodity>commodity){
     for (auto & c : commodity){
         double lastPrice = c.price[0];
         double prevPrice = c.price[1];
-        std::string arrow;
+        const char *arrow;
+        const char* color;
         if (lastPrice > prevPrice){
             arrow = "↑";
+            color = "\033[1;32m"; //green
         }
         else if (lastPrice < prevPrice){
             arrow = "↓";
+            color = "\033[1;31m"; //red
         }
         else {
             arrow = "";
+            color = "\033[1;34m"; //blue
         }
-        std::cout << "|     %s     |   %7.2lf   |   %7.2lf %s   |\n" << c.name << lastPrice << c.AvgPrice << arrow;
+        printf("| %-16s | %s%7.2lf\033[0m   |  %s%7.2lf\033[0m%s     |\n" ,c.name.c_str() ,color ,lastPrice ,color ,c.AvgPrice ,arrow);
     }
     std::cout<<"+---------------------------------------------+"<<"\n";
 }
