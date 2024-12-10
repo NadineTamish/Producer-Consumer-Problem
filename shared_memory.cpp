@@ -9,6 +9,7 @@
 #include <fcntl.h> // For O_CREAT
 #include <sys/stat.h> // For mode constants
 #include "shared_memory.h"
+using namespace std;
 
 int setupSharedMemory(int buffer_size, struct shared_buffer** buffer){
 
@@ -89,6 +90,7 @@ int initializeSemaphore(int buffer_size) {
 }
 
 void semaphoreWait(sem_t* semaphore) {
+    cout<<"entered";
     if (sem_wait(semaphore) == -1) {
         perror("Semaphore wait failed");
         exit(1);
