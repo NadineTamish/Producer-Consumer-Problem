@@ -120,7 +120,7 @@ int main(int argc, char** argv)
     // Setup shared memory
     struct shared_buffer* buffer;
     // setupSharedMemory(MAX_BOUNDED_BUFFER_SIZE, &buffer);
-    int shmid = setupSharedMemory(bounded_buffer_size, &buffer);
+    int shmid = setupSharedMemory(MAX_BOUNDED_BUFFER_SIZE, &buffer);
     initializeSemaphore(0);
 
     // consumer(bounded_buffer_size, buffer);
