@@ -3,10 +3,11 @@
 #include <cstring>
 #include <ctime>
 #include <cerrno>
-#include <unistd.h> //for sleep fn
+#include <unistd.h> //for sleep fn and fork
 #include <semaphore.h>
 #include <fcntl.h>  // for O_CREAT
 #include <sys/stat.h> // for mode constants
+#include <sys/wait.h> // For wait()
 #include "shared_memory.h"  // Assuming shared memory and buffer are defined her
 #include <thread>
 using namespace std;
@@ -58,21 +59,28 @@ Producer_ARGS parse_arguments(int argument_count,char *args[])
 }
 
 // Function to log time
+// void log_time(const char* message) {
+//     struct timespec ts;
+//     clock_gettime(CLOCK_REALTIME, &ts);
+//     char time_buffer[100];
+//     char date_buffer[100];
+//     cout<<"hello"<<endl;
+//     // Format the time
+//     std::strftime(time_buffer, sizeof(time_buffer), "%H:%M:%S", std::localtime(&ts.tv_sec));
+//     cout<<"hello1"<<endl;
+//     // Format the date
+//     std::strftime(date_buffer, sizeof(date_buffer), "%Y-%m-%d", std::localtime(&ts.tv_sec));
+//     cout<<"hello2"<<endl;
+//     // Print the date, time, and message
+//     std::cerr << "[" << date_buffer << " " << time_buffer << "." << ts.tv_nsec / 1000000 << "] " << message << std::endl;
+//     std::cout<<"hello3"<<endl;
+// }
+
 void log_time(const char* message) {
-    struct timespec ts;
-    clock_gettime(CLOCK_REALTIME, &ts);
+    std::time_t now = std::time(nullptr);
     char time_buffer[100];
-    char date_buffer[100];
-    cout<<"hello"<<endl;
-    // Format the time
-    std::strftime(time_buffer, sizeof(time_buffer), "%H:%M:%S", std::localtime(&ts.tv_sec));
-    cout<<"hello1"<<endl;
-    // Format the date
-    std::strftime(date_buffer, sizeof(date_buffer), "%Y-%m-%d", std::localtime(&ts.tv_sec));
-    cout<<"hello2"<<endl;
-    // Print the date, time, and message
-    std::cerr << "[" << date_buffer << " " << time_buffer << "." << ts.tv_nsec / 1000000 << "] " << message << std::endl;
-    std::cout<<"hello3"<<endl;
+    std::strftime(time_buffer, sizeof(time_buffer), "%Y-%m-%d %H:%M:%S", std::localtime(&now));
+    std::cerr << "[" << time_buffer << "] " << message << std::endl;
 }
 
 void sleep_using_clock_gettime(long milliseconds) {
@@ -139,7 +147,8 @@ void producer(Producer_ARGS args,struct shared_buffer* buffer)
 
         log_time((std::string(args.commodity_name) + ": sleeping for " + std::to_string(args.sleep_interval_ms) + " ms").c_str());
         //sleep_using_clock_gettime(args.sleep_interval_ms * 1000); // Sleep in milliseconds
-        std::this_thread::sleep_for(std::chrono::milliseconds(args.sleep_interval_ms)); // Sleep
+        // std::this_thread::sleep_for(std::chrono::milliseconds(args.sleep_interval_ms)); // Sleep
+        usleep(args.sleep_interval_ms * 1000);
 
     }
 
@@ -156,7 +165,26 @@ int main(int arguments_count, char* arguments[])
     Producer_ARGS args = parse_arguments(arguments_count, arguments);
     initializeSemaphore(args.bounded_buffer_size);
     // Start producing
-    producer(args, buffer);
+    // producer(args, buffer);
+
+     pid_t pid = fork(); // Create a new process for the producer
+    if (pid < 0) {
+        perror("Fork failed");
+        cleanupSharedMemory(shmid, buffer);
+        cleanupSemaphores();
+        exit(1);
+    } else if (pid == 0) {
+        // Child process: Producer
+        producer(args, buffer);
+        exit(0);
+    } else {
+
+        wait(NULL);
+
+        // Cleanup resources
+        cleanupSharedMemory(shmid, buffer);
+        cleanupSemaphores();
+    }
 
     return 0;
 

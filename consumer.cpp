@@ -3,6 +3,8 @@
 #include <string.h>
 #include <thread>
 #include "shared_memory.h"
+#include <unistd.h> // For fork and usleep
+#include <sys/wait.h> // For wait
 
 #define MAX_BOUNDED_BUFFER_SIZE 40
 
@@ -117,10 +119,29 @@ int main(int argc, char** argv)
 
     // Setup shared memory
     struct shared_buffer* buffer;
-    setupSharedMemory(MAX_BOUNDED_BUFFER_SIZE, &buffer);
+    // setupSharedMemory(MAX_BOUNDED_BUFFER_SIZE, &buffer);
+    int shmid = setupSharedMemory(bounded_buffer_size, &buffer);
     initializeSemaphore(0);
 
-    consumer(bounded_buffer_size, buffer);
+    // consumer(bounded_buffer_size, buffer);
+    pid_t pid = fork();
+    if (pid < 0) {
+        perror("Fork failed");
+        cleanupSharedMemory(shmid, buffer);
+        cleanupSemaphores();
+        exit(1);
+    } else if (pid == 0) {
+        // Child process: Consumer
+        consumer(bounded_buffer_size, buffer);
+        exit(0);
+    } else {
+        // Parent process: Wait for the consumer process to finish
+        wait(NULL);
+
+        // Cleanup resources
+        cleanupSharedMemory(shmid, buffer);
+        cleanupSemaphores();
+    }
 
 return 0;
 }
