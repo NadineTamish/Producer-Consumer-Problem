@@ -90,8 +90,6 @@ void *compute_next_gen(void *arg)
                 if (live_count == 3){
                     next_gen_grid[i][j] = 1;
                 }
-                else
-                    next_gen_grid[i][j] = 0;
             }
 
             if (next_gen_grid[i][j] == 1){
