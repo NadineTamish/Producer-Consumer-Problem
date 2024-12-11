@@ -80,26 +80,26 @@ void *compute_next_gen(void *arg)
 
                     if ((i+hor) >= 0 && (i+hor) < GRID_SIZE && (j+ver) >= 0 && (j+ver) < GRID_SIZE)
                     {
-                        if (next_gen_grid[(i+hor)][(j+ver)] == 1)
+                        if (grid[(i+hor)][(j+ver)] == 1)
                             live_count++;
+            
                     }
                 }
             }
             // birth rule
-            if (next_gen_grid[i][j] == 0){
+            if (grid[i][j] == 0){
                 if (live_count == 3){
                     next_gen_grid[i][j] = 1;
                 }
             }
 
-            if (next_gen_grid[i][j] == 1){
+            else {
                 // Survival Rule
-                if (live_count == 2 || live_count == 3)
-                {
+                if (live_count == 2 || live_count == 3){
                     next_gen_grid[i][j] = 1;
                 }
                 // Death Rule
-                if (live_count < 2 || live_count > 3)
+                else if (live_count < 2 || live_count > 3)
                 {
                     next_gen_grid[i][j] = 0;
                 }
@@ -124,7 +124,7 @@ void *compute_next_gen(void *arg)
     }
     
     free(arg);
-
+    return NULL;
 }
 
 void initialize_grid(int grid[GRID_SIZE][GRID_SIZE])
@@ -152,6 +152,9 @@ void initialize_patterns(int grid[GRID_SIZE][GRID_SIZE])
     grid[5][6] = 1;
     grid[6][6] = 1;
     grid[7][6] = 1;
+    // grid[5][5]=1;
+    // grid[5][6]=1;
+    // grid[5][7]=1;
 
     // Initialize Spaceship (Glider) in the bottom-right
     grid[10][10] = 1;
@@ -159,6 +162,7 @@ void initialize_patterns(int grid[GRID_SIZE][GRID_SIZE])
     grid[12][9] = 1;
     grid[12][10] = 1;
     grid[12][11] = 1;
+
     // grid[15][15] = 1;
     // grid[16][16] = 1;
     // grid[17][14] = 1;
