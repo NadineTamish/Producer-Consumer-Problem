@@ -72,7 +72,7 @@ void *compute_next_gen(void *arg)
 
     for (int i = start; i <= end; i++){
         for (int j = 0; j < GRID_SIZE; j++){
-            // live_count=0;
+            live_count=0;
             for (int hor = -1; hor <= 1; hor++){
                 for (int ver = -1; ver <= 1; ver++){
                     if (hor == 0 && ver == 0)
@@ -109,18 +109,22 @@ void *compute_next_gen(void *arg)
         }
     }
 
-    pthread_barrier_wait(&barrier); // wait for all threads to arrive at barrier
+    int b = pthread_barrier_wait(&barrier); // wait for all threads to arrive at barrier
+    //debugging
+    // int errno = b;
+    // perror("pthread_barrier_wait");
+    // exit(1);
 
     // update next gen
-    for (int i = 0; i < GRID_SIZE; i++)
-    {
-        for (int j = 0; j < GRID_SIZE; j++)
-        {
+    if(b == PTHREAD_BARRIER_SERIAL_THREAD){
+        for (int i = 0; i < GRID_SIZE; i++){
+        for (int j = 0; j < GRID_SIZE; j++){
             grid[i][j] = next_gen_grid[i][j];
+            }
         }
+        print_grid();
     }
-
-    print_grid();
+    
 
 }
 
@@ -185,7 +189,6 @@ int main()
         for (int i = 0; i < NUM_THREADS; i++){
                 pthread_join(threads[i], NULL);
         }
-        
         
         passed_generations++;
     
