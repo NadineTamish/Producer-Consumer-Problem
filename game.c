@@ -65,53 +65,36 @@ void print_grid()
 // Function to compute next generation of Game of Life
 void *compute_next_gen(void *arg)
 {
-    int live_count = 0;
+    int live_count=0;
     state *args = (state *)arg;
     int start = args->start;
     int end = args->end;
 
-    for (int i = start; i <= end; i++)
-    {
-        for (int j = 0; j < GRID_SIZE; j++)
-        {
-            for (int hor = -1; hor <= 1; hor++)
-            {
-                for (int ver = -1; ver <= 1; ver++)
-                {
+    for (int i = start; i <= end; i++){
+        for (int j = 0; j < GRID_SIZE; j++){
+            // live_count=0;
+            for (int hor = -1; hor <= 1; hor++){
+                for (int ver = -1; ver <= 1; ver++){
                     if (hor == 0 && ver == 0)
                         continue;
 
-                    if (i + hor >= 0 || i + hor < GRID_SIZE || j + ver >= 0 || j + ver < GRID_SIZE)
+                    if (i + hor >= 0 && i + hor < GRID_SIZE && j + ver >= 0 && j + ver < GRID_SIZE)
                     {
                         if (next_gen_grid[i + hor][j + ver] == 1)
-                        {
                             live_count++;
-                        }
                     }
                 }
             }
-        }
-    }
-
-    for (int i = start; i <= end; i++)
-    {
-        for (int j = 0; j < GRID_SIZE; j++)
-        {
             // birth rule
-            if (next_gen_grid[i][j] == 0)
-            {
-                if (live_count == 3)
-                {
+            if (next_gen_grid[i][j] == 0){
+                if (live_count == 3){
                     next_gen_grid[i][j] = 1;
                 }
                 else
-                {
                     next_gen_grid[i][j] = 0;
-                }
             }
 
-            if (next_gen_grid[i][j] == 1)
-            {
+            if (next_gen_grid[i][j] == 1){
                 // Survival Rule
                 if (live_count == 2 || live_count == 3)
                 {
@@ -136,6 +119,9 @@ void *compute_next_gen(void *arg)
             grid[i][j] = next_gen_grid[i][j];
         }
     }
+
+    print_grid();
+
 }
 
 void initialize_grid(int grid[GRID_SIZE][GRID_SIZE])
@@ -177,33 +163,35 @@ int main()
     initialize_patterns(grid);
     pthread_barrier_init(&barrier, NULL, NUM_THREADS);
     pthread_t threads[NUM_THREADS];
-
-    state *args = (state *)malloc(sizeof(state)); //
-    int rows = 0;
+    
     int passed_generations = 0;
     while (passed_generations <= GENERATIONS)
     {
-        for (int i = 0; i < GRID_SIZE; i++)
-        {
-
-            if (i == (NUM_THREADS) + rows)
-            {
-                args->start = rows;
-                args->end = (NUM_THREADS) + rows;
-                rows += 5;
+        int rows = 0;
+        for (int i = 0; i < NUM_THREADS; i++){
+            state *args = (state *)malloc(sizeof(state));
+            args->start = rows;
+            rows += 5;
                 // printf("%d\n",(end-NUM_THREADS)/(NUM_THREADS));
-                pthread_create(&threads[((args->end) - NUM_THREADS) / (NUM_THREADS)], NULL, compute_next_gen, args); // check indexing of thread
+            if(i==NUM_THREADS-1){
+                args->end = GRID_SIZE-1;
             }
+            else{
+                args->end = rows-1;
+            }
+            pthread_create(&threads[i], NULL, compute_next_gen, args); // check indexing of thread
         }
-        for (int i = 0; i < NUM_THREADS; i++)
-        {
-            pthread_join(threads[i], NULL);
+
+        for (int i = 0; i < NUM_THREADS; i++){
+                pthread_join(threads[i], NULL);
         }
+        
+        
         passed_generations++;
-        print_grid();
+    
     }
 
     pthread_barrier_destroy(&barrier);
-
+    
     return 0;
 }
