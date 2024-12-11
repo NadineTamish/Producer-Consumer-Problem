@@ -35,7 +35,7 @@ void print_grid()
         }
         printf("\n");
     }
-    sleep(500000); // sleep(500000)
+    usleep(500000); // sleep(500000)
 }
 
 // int count_live_neigbours(start,end,i,j){
@@ -78,9 +78,9 @@ void *compute_next_gen(void *arg)
                     if (hor == 0 && ver == 0)
                         continue;
 
-                    if (i + hor >= 0 && i + hor < GRID_SIZE && j + ver >= 0 && j + ver < GRID_SIZE)
+                    if ((i+hor) >= 0 && (i+hor) < GRID_SIZE && (j+ver) >= 0 && (j+ver) < GRID_SIZE)
                     {
-                        if (next_gen_grid[i + hor][j + ver] == 1)
+                        if (next_gen_grid[(i+hor)][(j+ver)] == 1)
                             live_count++;
                     }
                 }
@@ -118,13 +118,14 @@ void *compute_next_gen(void *arg)
     // update next gen
     if(b == PTHREAD_BARRIER_SERIAL_THREAD){
         for (int i = 0; i < GRID_SIZE; i++){
-        for (int j = 0; j < GRID_SIZE; j++){
-            grid[i][j] = next_gen_grid[i][j];
+            for (int j = 0; j < GRID_SIZE; j++){
+                grid[i][j] = next_gen_grid[i][j];
             }
         }
         print_grid();
     }
     
+    free(arg);
 
 }
 
@@ -160,11 +161,17 @@ void initialize_patterns(int grid[GRID_SIZE][GRID_SIZE])
     grid[12][9] = 1;
     grid[12][10] = 1;
     grid[12][11] = 1;
+    // grid[15][15] = 1;
+    // grid[16][16] = 1;
+    // grid[17][14] = 1;
+    // grid[17][15] = 1;
+    // grid[17][16] = 1;
 }
 
 int main()
 {
     initialize_patterns(grid);
+    initialize_patterns(next_gen_grid);
     pthread_barrier_init(&barrier, NULL, NUM_THREADS);
     pthread_t threads[NUM_THREADS];
     
@@ -190,7 +197,7 @@ int main()
                 pthread_join(threads[i], NULL);
         }
         
-        passed_generations++;
+        printf("%d",passed_generations++);
     
     }
 
