@@ -8,12 +8,27 @@
 #include <fcntl.h>  // for O_CREAT
 #include <sys/stat.h> // for mode constants
 #include <sys/wait.h> // For wait()
-#include "shared_memory.h"  // Assuming shared memory and buffer are defined her
-#include <thread>
+#include <sys/shm.h>
+#include <sys/sem.h>
 using namespace std;
 
 #define MAX_COMMODITY_NAME 10
 #define MAX_BOUNDED_BUFFER_SIZE 40
+
+#define SEM_KEY1 0x54321
+#define SEM_KEY2 0x54322
+#define SEM_KEY3 0x54323
+#define SEM_KEY4 0x54324
+
+struct shared_buffer{
+
+    char commodities[MAX_BOUNDED_BUFFER_SIZE][MAX_COMMODITY_NAME];
+    double prices[MAX_BOUNDED_BUFFER_SIZE]; //prices associated with the commodities
+    int in; // points to the next position where the producer will insert a new commodity
+    int out; // points to the next position where the consumer will remove a commodity.
+    int count; // keeps track of how many items are currently in the buffer.
+
+};
 
 
 struct Producer_ARGS{
@@ -107,6 +122,42 @@ void producer(Producer_ARGS args,struct shared_buffer* buffer)
     std::random_device rd;  // Obtain a random number from hardware
     std::default_random_engine gen(rd());
     std::normal_distribution<>price_dist(args.commodity_price_mean,args.commodity_price_stand_dev);
+
+    struct sembuf sem_buf_e;
+    struct sembuf sem_buf_f;
+    struct sembuf sem_buf_m;
+    struct sembuf sem_buf_i;
+
+    int emptyId = semget(SEM_KEY1, 1, 0666);
+    int fullId = semget(SEM_KEY2, 1, 0666);
+    int mutexId = semget(SEM_KEY3, 1, 0666);
+    int indexId = semget(SEM_KEY4, 1, 0666);
+
+    if (emptyId == -1) {
+		// Create new semafor.
+		emptyId = semget(SEM_KEY1, 1, 0666 | IPC_CREAT);
+        semctl(emptyId, 0, SETVAL, args.bounded_buffer_size);
+	}
+
+     if (fullId == -1) {
+		// Create new semafor.
+		fullId = semget(SEM_KEY2, 1, 0666 | IPC_CREAT);
+        semctl(fullId, 0, SETVAL, 0);
+	}
+
+    if (mutexId == -1) {
+		// Create new semafor.
+		mutexId = semget(SEM_KEY3, 1, 0666 | IPC_CREAT);
+        semctl(mutexId, 0, SETVAL, 1);
+    }
+
+    if (indexId == -1) {
+		// Create new semafor.
+		indexId = semget(SEM_KEY4, 1, 0666 | IPC_CREAT);
+        semctl(indexId, 0, SETVAL, 0);
+	}
+
+
     while(true)
     {
         std::cout << "Before log_time" << std::endl;
@@ -119,14 +170,22 @@ void producer(Producer_ARGS args,struct shared_buffer* buffer)
         log_time((std::string(args.commodity_name) + ": generating a new value: " + std::to_string(price)).c_str());
         std::cout << "Nadine" << std::endl; 
         // Wait for an empty slot
-        semaphoreWait(empty);
+        // semaphoreWait(empty);
+        // wait empty
+        sem_buf_e = {0, -1 , 0};
+        semop(emptyId, &sem_buf_e, 1);
+
         std::cout << "nadine1" << std::endl;
 
 
          // Wait to lock the buffer (ensure mutual exclusion)
         log_time((std::string(args.commodity_name) + ": trying to get mutex on shared buffer").c_str());
-        semaphoreWait(mutex);
+        // semaphoreWait(mutex);
 
+        sem_buf_m = {0, -1 , 0};
+        semop(mutexId, &sem_buf_m, 1);
+
+        // CRITICAL SECTION
         //place the price in the buffer
         snprintf(buffer->commodities[buffer->in],MAX_COMMODITY_NAME, "%s",args.commodity_name);
         buffer->prices[buffer->in]=price; // Store the price
@@ -142,8 +201,14 @@ void producer(Producer_ARGS args,struct shared_buffer* buffer)
         log_time((std::string(args.commodity_name) + ": placing price " + std::to_string(price) + " on shared buffer").c_str());
 
         // Signal that new data is available for consumers
-        semaphoreSignal(mutex);
-        semaphoreSignal(full);
+        // semaphoreSignal(mutex);
+        // semaphoreSignal(full);
+
+        sem_buf_m = {0, 1 , 0};
+        semop(mutexId, &sem_buf_m, 1);
+
+        sem_buf_f = {0, 1 , 0};
+        semop(fullId, &sem_buf_f, 1);
 
         log_time((std::string(args.commodity_name) + ": sleeping for " + std::to_string(args.sleep_interval_ms) + " ms").c_str());
         //sleep_using_clock_gettime(args.sleep_interval_ms * 1000); // Sleep in milliseconds
@@ -151,42 +216,49 @@ void producer(Producer_ARGS args,struct shared_buffer* buffer)
         usleep(args.sleep_interval_ms * 1000);
 
     }
-
-
 }
 
 int main(int arguments_count, char* arguments[])
 {
-    struct shared_buffer* buffer;
-    // Setup shared memory
-    int shmid=setupSharedMemory(MAX_BOUNDED_BUFFER_SIZE, &buffer);
+    struct sembuf sem_buf_e;
+    struct sembuf sem_buf_f;
+    struct sembuf sem_buf_m;
+    struct sembuf sem_buf_i;
 
+    
+    // struct shared_buffer* buffer;
+    // Setup shared memory
+    // int shmid=setupSharedMemory(MAX_BOUNDED_BUFFER_SIZE, &buffer);
+    
     // Parse command-line arguments
     Producer_ARGS args = parse_arguments(arguments_count, arguments);
-    initializeSemaphore(args.bounded_buffer_size);
+    // initializeSemaphore(args.bounded_buffer_size);
     // Start producing
     // producer(args, buffer);
 
-     pid_t pid = fork(); // Create a new process for the producer
-    if (pid < 0) {
-        perror("Fork failed");
-        cleanupSharedMemory(shmid, buffer);
-        cleanupSemaphores();
+    struct shared_buffer *buffer;
+    int shmID = shmget(3000, sizeof(struct shared_buffer)*args.bounded_buffer_size, 0644 | IPC_CREAT);
+
+    if (shmID == -1) {
+        perror("shmget failed");
         exit(1);
-    } else if (pid == 0) {
-        // Child process: Producer
-        producer(args, buffer);
-        exit(0);
-    } else {
-
-        wait(NULL);
-
-        // Cleanup resources
-        cleanupSharedMemory(shmid, buffer);
-        cleanupSemaphores();
     }
 
-    return 0;
+    buffer = (struct shared_buffer*)shmat(shmID, nullptr, 0);
+    if (buffer == (void*)-1) {
+        perror("shmat failed");
+        exit(1);
+    }
 
+    // Initialize shared memory
+    buffer->in = 0;
+    buffer->out = 0;
+    buffer->count = 0;
+
+    producer(args, buffer);
+    
+    shmdt(buffer);
+
+    return 0;
 
 }
