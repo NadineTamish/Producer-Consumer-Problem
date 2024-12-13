@@ -123,39 +123,55 @@ void producer(Producer_ARGS args,struct shared_buffer* buffer)
     std::default_random_engine gen(rd());
     std::normal_distribution<>price_dist(args.commodity_price_mean,args.commodity_price_stand_dev);
 
-    struct sembuf sem_buf_e;
-    struct sembuf sem_buf_f;
-    struct sembuf sem_buf_m;
-    struct sembuf sem_buf_i;
+    // struct sembuf sem_buf_e;
+    // struct sembuf sem_buf_f;
+    // struct sembuf sem_buf_m;
+    // struct sembuf sem_buf_i;
 
-    int emptyId = semget(SEM_KEY1, 1, 0666);
-    int fullId = semget(SEM_KEY2, 1, 0666);
-    int mutexId = semget(SEM_KEY3, 1, 0666);
-    int indexId = semget(SEM_KEY4, 1, 0666);
+    struct sembuf sem_buf;
 
-    if (emptyId == -1) {
-		// Create new semafor.
-		emptyId = semget(SEM_KEY1, 1, 0666 | IPC_CREAT);
-        semctl(emptyId, 0, SETVAL, args.bounded_buffer_size);
-	}
+    // int emptyId = semget(SEM_KEY1, 1, 0666);
+    // int fullId = semget(SEM_KEY2, 1, 0666);
+    // int mutexId = semget(SEM_KEY3, 1, 0666);
+    // int indexId = semget(SEM_KEY4, 1, 0666);
 
-     if (fullId == -1) {
-		// Create new semafor.
-		fullId = semget(SEM_KEY2, 1, 0666 | IPC_CREAT);
-        semctl(fullId, 0, SETVAL, 0);
-	}
+    // if (emptyId == -1) {
+	// 	// Create new semafor.
+	// 	emptyId = semget(SEM_KEY1, 1, 0666 | IPC_CREAT);
+    //     semctl(emptyId, 0, SETVAL, args.bounded_buffer_size);
+	// }
 
-    if (mutexId == -1) {
-		// Create new semafor.
-		mutexId = semget(SEM_KEY3, 1, 0666 | IPC_CREAT);
-        semctl(mutexId, 0, SETVAL, 1);
+    //  if (fullId == -1) {
+	// 	// Create new semafor.
+	// 	fullId = semget(SEM_KEY2, 1, 0666 | IPC_CREAT);
+    //     semctl(fullId, 0, SETVAL, 0);
+	// }
+
+    // if (mutexId == -1) {
+	// 	// Create new semafor.
+	// 	mutexId = semget(SEM_KEY3, 1, 0666 | IPC_CREAT);
+    //     semctl(mutexId, 0, SETVAL, 1);
+    // }
+
+    // if (indexId == -1) {
+	// 	// Create new semafor.
+	// 	indexId = semget(SEM_KEY4, 1, 0666 | IPC_CREAT);
+    //     semctl(indexId, 0, SETVAL, 0);
+	// }
+
+    int emptyId = semget(SEM_KEY1, 1, 0666 | IPC_CREAT);
+    int fullId = semget(SEM_KEY2, 1, 0666 | IPC_CREAT);
+    int mutexId = semget(SEM_KEY3, 1, 0666 | IPC_CREAT);
+
+    if (emptyId == -1 || fullId == -1 || mutexId == -1) {
+        perror("semget failed");
+        exit(1);
     }
 
-    if (indexId == -1) {
-		// Create new semafor.
-		indexId = semget(SEM_KEY4, 1, 0666 | IPC_CREAT);
-        semctl(indexId, 0, SETVAL, 0);
-	}
+    // Initialize semaphores
+    semctl(emptyId, 0, SETVAL, args.bounded_buffer_size);
+    semctl(fullId, 0, SETVAL, 0);
+    semctl(mutexId, 0, SETVAL, 1);
 
 
     while(true)
@@ -172,8 +188,8 @@ void producer(Producer_ARGS args,struct shared_buffer* buffer)
         // Wait for an empty slot
         // semaphoreWait(empty);
         // wait empty
-        sem_buf_e = {0, -1 , 0};
-        semop(emptyId, &sem_buf_e, 1);
+        sem_buf= {0, -1 , 0};
+        semop(emptyId, &sem_buf, 1);
 
         std::cout << "nadine1" << std::endl;
 
@@ -182,8 +198,8 @@ void producer(Producer_ARGS args,struct shared_buffer* buffer)
         log_time((std::string(args.commodity_name) + ": trying to get mutex on shared buffer").c_str());
         // semaphoreWait(mutex);
 
-        sem_buf_m = {0, -1 , 0};
-        semop(mutexId, &sem_buf_m, 1);
+        sem_buf = {0, -1 , 0};
+        semop(mutexId, &sem_buf, 1);
 
         // CRITICAL SECTION
         //place the price in the buffer
@@ -204,11 +220,11 @@ void producer(Producer_ARGS args,struct shared_buffer* buffer)
         // semaphoreSignal(mutex);
         // semaphoreSignal(full);
 
-        sem_buf_m = {0, 1 , 0};
-        semop(mutexId, &sem_buf_m, 1);
+        sem_buf = {0, 1 , 0};
+        semop(mutexId, &sem_buf, 1);
 
-        sem_buf_f = {0, 1 , 0};
-        semop(fullId, &sem_buf_f, 1);
+        sem_buf = {0, 1 , 0};
+        semop(fullId, &sem_buf, 1);
 
         log_time((std::string(args.commodity_name) + ": sleeping for " + std::to_string(args.sleep_interval_ms) + " ms").c_str());
         //sleep_using_clock_gettime(args.sleep_interval_ms * 1000); // Sleep in milliseconds
@@ -220,10 +236,10 @@ void producer(Producer_ARGS args,struct shared_buffer* buffer)
 
 int main(int arguments_count, char* arguments[])
 {
-    struct sembuf sem_buf_e;
-    struct sembuf sem_buf_f;
-    struct sembuf sem_buf_m;
-    struct sembuf sem_buf_i;
+    // struct sembuf sem_buf_e;
+    // struct sembuf sem_buf_f;
+    // struct sembuf sem_buf_m;
+    // struct sembuf sem_buf_i;
 
     
     // struct shared_buffer* buffer;
@@ -236,21 +252,28 @@ int main(int arguments_count, char* arguments[])
     // Start producing
     // producer(args, buffer);
 
-    struct shared_buffer *buffer;
-    int shmID = shmget(3000, sizeof(struct shared_buffer)*args.bounded_buffer_size, 0644 | IPC_CREAT);
+    // struct shared_buffer *buffer;
+    // Generate a unique key for shared memory
+    key_t key = ftok("/tmp", 65);
+    if (key == -1) {
+        perror("ftok failed");
+        exit(1);
+    }
+    int shmID = shmget(key, sizeof(struct shared_buffer), 0644 | IPC_CREAT);
 
     if (shmID == -1) {
         perror("shmget failed");
         exit(1);
     }
 
-    buffer = (struct shared_buffer*)shmat(shmID, nullptr, 0);
+    shared_buffer* buffer = (shared_buffer*)shmat(shmID, nullptr, 0);
     if (buffer == (void*)-1) {
         perror("shmat failed");
         exit(1);
     }
 
     // Initialize shared memory
+    memset(buffer, 0, sizeof(shared_buffer));
     buffer->in = 0;
     buffer->out = 0;
     buffer->count = 0;
