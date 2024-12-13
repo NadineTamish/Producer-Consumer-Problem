@@ -1,30 +1,24 @@
 #include <iostream>
 #include <vector>
 #include <string.h>
-
 #include <unistd.h> // For fork and usleep
-#include <sys/wait.h> // For wait
-#include <random>
-#include <cstring>
-#include <ctime>
-#include <cerrno>
-#include <semaphore.h>
 #include <fcntl.h>  // for O_CREAT
 #include <sys/stat.h> // for mode constants
 #include <sys/shm.h>
 #include <sys/sem.h>
+#include <sys/ipc.h>
+
+using namespace std;
+
+#define MAX_BOUNDED_BUFFER_SIZE 40
+#define MAX_COMMODITY_NAME 11
 
 #define SEM_KEY1 0x54321
 #define SEM_KEY2 0x54322
 #define SEM_KEY3 0x54323
-#define SEM_KEY4 0x54324
-
-#define MAX_BOUNDED_BUFFER_SIZE 40
-#define MAX_COMMODITY_NAME 10
-
-using namespace std;
 
 struct shared_buffer {
+
     char commodities[MAX_BOUNDED_BUFFER_SIZE][MAX_COMMODITY_NAME];
     double prices[MAX_BOUNDED_BUFFER_SIZE]; // prices associated with the commodities
     int in; // points to the next position where the producer will insert a new commodity
@@ -35,7 +29,7 @@ struct shared_buffer {
 // Commodities and store the last 5 prices of each
 struct commodity
 {
-   std::string name;
+   string name;
    double price[5] = {0.00};
    double AvgPrice = 0.00; 
 };
@@ -59,11 +53,11 @@ void modify(commodity &c ,double newPrice){
 }
 
 // Display
-void displayTable(std::vector<commodity>commodity){
-    std::cout<<"\e[1;1H\e[2J";
-    std::cout<<"+---------------------------------------------+"<<"\n";
-    std::cout<<"|     Currency     |   Price   |   AvgPrice   |"<<"\n";
-    std::cout<<"+---------------------------------------------+"<<"\n";
+void displayTable(vector<commodity>commodity){
+    cout<<"\e[1;1H\e[2J";
+    cout<<"+-------------------------------------------------+"<<"\n";
+    cout<<"|     Currency     |    Price    |    AvgPrice    |"<<"\n";
+    cout<<"+-------------------------------------------------+"<<"\n";
     for (auto & c : commodity){
         double lastPrice = c.price[0];
         double prevPrice = c.price[1];
@@ -81,15 +75,15 @@ void displayTable(std::vector<commodity>commodity){
             arrow = "";
             color = "\033[1;34m"; //blue
         }
-        printf("| %-16s | %s%7.2lf\033[0m   |  %s%7.2lf\033[0m%s     |\n" ,c.name.c_str() ,color ,lastPrice ,color ,c.AvgPrice ,arrow);
+        printf("| %-16s |  %s%7.2lf\033[0m    |   %s%7.2lf\033[0m%-1s     |\n" ,c.name.c_str() ,color ,lastPrice ,color ,c.AvgPrice ,arrow);
     }
-    std::cout<<"+---------------------------------------------+"<<"\n";
+    cout<<"+-------------------------------------------------+"<<"\n";
 }
 
 
 void consumer(int bounded_buffer_size, struct shared_buffer* buffer) {
-    std::vector<commodity> commodities;
-    std::string products[] = {"ALUMINIUM", "COPPER", "COTTON", "CRUDEOIL", "GOLD", "LEAD", "MENTHANOL", "NATURALGAS", "NICKEL", "SILVER", "ZINC"};
+    vector<commodity> commodities;
+    string products[] = {"ALUMINIUM", "COPPER", "COTTON", "CRUDEOIL", "GOLD", "LEAD", "MENTHANOL", "NATURALGAS", "NICKEL", "SILVER", "ZINC"};
 
     // Add the product names to the vector
     for (int i = 0; i < 11; i++) {
@@ -97,6 +91,8 @@ void consumer(int bounded_buffer_size, struct shared_buffer* buffer) {
         c.name = products[i];
         commodities.push_back(c);
     }
+
+    struct sembuf sem_buf;
 
     // Semaphore for mutual exclusion
     int emptyId = semget(SEM_KEY1, 1, 0666);
@@ -108,7 +104,10 @@ void consumer(int bounded_buffer_size, struct shared_buffer* buffer) {
         exit(1);
     }
 
-    struct sembuf sem_buf;
+    // Initialize semaphores
+    semctl(emptyId, 0, SETVAL, bounded_buffer_size);
+    semctl(fullId, 0, SETVAL, 0);
+    semctl(mutexId, 0, SETVAL, 1);
 
     while (true) {
         // Wait if full (if buffer is empty, consumer will wait)
@@ -116,7 +115,6 @@ void consumer(int bounded_buffer_size, struct shared_buffer* buffer) {
         semop(fullId, &sem_buf, 1);
 
         // Wait to lock the buffer (ensure mutual exclusion)
-        sem_buf = {0, -1, 0};
         semop(mutexId, &sem_buf, 1);
 
         // Check if the buffer has any items to consume
@@ -133,7 +131,6 @@ void consumer(int bounded_buffer_size, struct shared_buffer* buffer) {
             semop(mutexId, &sem_buf, 1);
 
             // Signal that buffer is empty for producers
-            sem_buf = {0, 1, 0};
             semop(emptyId, &sem_buf, 1);
 
             // Modify commodity with the new price
@@ -148,53 +145,34 @@ void consumer(int bounded_buffer_size, struct shared_buffer* buffer) {
             displayTable(commodities);
         } else {
             // If no items in buffer, print debug message
-            std::cout << "Buffer is empty, waiting for producer..." << std::endl;
+            cout << "Buffer is empty, waiting for producer..." << endl;
         }
-
 
         usleep(100000); // Sleep for 0.1 seconds
     }
 }
 
-
-void cleanup(int shmID, shared_buffer* buffer) {
-    // Detach shared memory
-    shmdt(buffer);
-
-    // Remove shared memory
-    shmctl(shmID, IPC_RMID, nullptr);
-
-    // Cleanup semaphores (you must call `semctl` to remove semaphores)
-    semctl(SEM_KEY1, 0, IPC_RMID);
-    semctl(SEM_KEY2, 0, IPC_RMID);
-    semctl(SEM_KEY3, 0, IPC_RMID);
-}
-
 int main(int argc, char** argv)
 {
     if (argc != 2){
-        std::cerr << "Usage: ./consumer <buffer_size>\n";
+        cerr << "Usage: ./consumer <buffer_size>\n";
         exit(1);
     }
 
     int bounded_buffer_size = std::stoi(argv[1]);
     if (bounded_buffer_size > MAX_BOUNDED_BUFFER_SIZE) {
-        std::cerr << "Error: Buffer size exceeds maximum allowed (" << MAX_BOUNDED_BUFFER_SIZE << ").\n";
+        cerr << "Error: Buffer size exceeds maximum allowed (" << MAX_BOUNDED_BUFFER_SIZE << ").\n";
         exit(1);
     }
 
     // Setup shared memory
-    key_t key = ftok("/tmp", 65);
+    key_t key = ftok("file", 65);
     if (key == -1) {
         perror("ftok failed");
         exit(1);
     }
 
     // Setup shared memory
-    // struct shared_buffer* buffer;
-    // setupSharedMemory(MAX_BOUNDED_BUFFER_SIZE, &buffer);
-    // int shmid = setupSharedMemory(MAX_BOUNDED_BUFFER_SIZE, &buffer);
-    // initializeSemaphore(0);
     int shmID = shmget(key, sizeof(struct shared_buffer), 0644 | IPC_CREAT);
 
      if (shmID == -1) {
@@ -207,35 +185,18 @@ int main(int argc, char** argv)
         perror("shmat failed");
         exit(1);
     }
-    // consumer(bounded_buffer_size, buffer);
-    // pid_t pid = fork();
-    // if (pid < 0) {
-    //     perror("Fork failed");
-    //     cleanupSharedMemory(shmid, buffer);
-    //     cleanupSemaphores();
-    //     exit(1);
-    // } else if (pid == 0) {
-    //     // Child process: Consumer
-    //     consumer(bounded_buffer_size, buffer);
-    //     exit(0);
-    // } else {
-    //     // Parent process: Wait for the consumer process to finish
-    //     wait(NULL);
-
-    //     // Cleanup resources
-    //     cleanupSharedMemory(shmid, buffer);
-    //     cleanupSemaphores();
-    // }
-
    
-    // Start consuming
-
+    // Initialize shared buffer
     memset(buffer, 0, sizeof(shared_buffer));
+
+    // Start consuming
     consumer(bounded_buffer_size, buffer);
 
+    // Detach from shared memory
     shmdt(buffer);
-     // Cleanup shared memory
-    // cleanup(shmID, buffer);
+
+    // Destroy the shared memory
+    shmctl(shmID, IPC_RMID, NULL);
 
 return 0;
 }
