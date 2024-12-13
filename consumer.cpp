@@ -1,12 +1,36 @@
 #include <iostream>
 #include <vector>
 #include <string.h>
-#include <thread>
-#include "shared_memory.h"
+
 #include <unistd.h> // For fork and usleep
 #include <sys/wait.h> // For wait
+#include <random>
+#include <cstring>
+#include <ctime>
+#include <cerrno>
+#include <semaphore.h>
+#include <fcntl.h>  // for O_CREAT
+#include <sys/stat.h> // for mode constants
+#include <sys/shm.h>
+#include <sys/sem.h>
+
+#define SEM_KEY1 0x54321
+#define SEM_KEY2 0x54322
+#define SEM_KEY3 0x54323
+#define SEM_KEY4 0x54324
 
 #define MAX_BOUNDED_BUFFER_SIZE 40
+#define MAX_COMMODITY_NAME 10
+
+using namespace std;
+
+struct shared_buffer {
+    char commodities[MAX_BOUNDED_BUFFER_SIZE][MAX_COMMODITY_NAME];
+    double prices[MAX_BOUNDED_BUFFER_SIZE]; // prices associated with the commodities
+    int in; // points to the next position where the producer will insert a new commodity
+    int out; // points to the next position where the consumer will remove a commodity
+    int count; // keeps track of how many items are currently in the buffer
+};
 
 // Commodities and store the last 5 prices of each
 struct commodity
@@ -62,46 +86,88 @@ void displayTable(std::vector<commodity>commodity){
     std::cout<<"+---------------------------------------------+"<<"\n";
 }
 
-void consumer(int bounded_buffer_size, struct shared_buffer* buffer){
+
+void consumer(int bounded_buffer_size, struct shared_buffer* buffer) {
     std::vector<commodity> commodities;
     std::string products[] = {"ALUMINIUM", "COPPER", "COTTON", "CRUDEOIL", "GOLD", "LEAD", "MENTHANOL", "NATURALGAS", "NICKEL", "SILVER", "ZINC"};
 
     // Add the product names to the vector
-    for (int i = 0; i < 11; i++){
+    for (int i = 0; i < 11; i++) {
         commodity c;
         c.name = products[i];
         commodities.push_back(c);
     }
 
-    while(true)
-    {
-        // Wait if full
-        semaphoreWait(full);
+    // Semaphore for mutual exclusion
+    int emptyId = semget(SEM_KEY1, 1, 0666);
+    int fullId = semget(SEM_KEY2, 1, 0666);
+    int mutexId = semget(SEM_KEY3, 1, 0666);
+
+    if (emptyId == -1 || fullId == -1 || mutexId == -1) {
+        perror("semget failed");
+        exit(1);
+    }
+
+    struct sembuf sem_buf;
+
+    while (true) {
+        // Wait if full (if buffer is empty, consumer will wait)
+        sem_buf = {0, -1, 0};
+        semop(fullId, &sem_buf, 1);
 
         // Wait to lock the buffer (ensure mutual exclusion)
-        semaphoreWait(mutex);
+        sem_buf = {0, -1, 0};
+        semop(mutexId, &sem_buf, 1);
 
-        // Read from buffer and update 'out' index (circular buffer)
-        std::string name = buffer->commodities[buffer->out];
-        double price = buffer->prices[buffer->out];
+        // Check if the buffer has any items to consume
+        if (buffer->count > 0) {
+            // Read from buffer and update 'out' index (circular buffer)
+            std::string name = buffer->commodities[buffer->out];
+            double price = buffer->prices[buffer->out];
 
-        buffer->out=((buffer->out)+1) % bounded_buffer_size;
-        buffer->count--;
-    
-        // Signal that buffer is empty for producers
-        semaphoreSignal(mutex);
-        semaphoreSignal(empty);
+            buffer->out = (buffer->out + 1) % bounded_buffer_size;
+            buffer->count--;
 
-        // Modify "commodity" with the new price
-        for (auto & c : commodities){
-            if(c.name == name){
-                modify(c,price);
-                break;
+            // Unlock the buffer (release mutex)
+            sem_buf = {0, 1, 0};
+            semop(mutexId, &sem_buf, 1);
+
+            // Signal that buffer is empty for producers
+            sem_buf = {0, 1, 0};
+            semop(emptyId, &sem_buf, 1);
+
+            // Modify commodity with the new price
+            for (auto &c : commodities) {
+                if (c.name == name) {
+                    modify(c, price);
+                    break;
+                }
             }
+
+            // Display the table
+            displayTable(commodities);
+        } else {
+            // If no items in buffer, print debug message
+            std::cout << "Buffer is empty, waiting for producer..." << std::endl;
         }
-        // display the table
-        displayTable(commodities); 
+
+
+        usleep(100000); // Sleep for 0.1 seconds
     }
+}
+
+
+void cleanup(int shmID, shared_buffer* buffer) {
+    // Detach shared memory
+    shmdt(buffer);
+
+    // Remove shared memory
+    shmctl(shmID, IPC_RMID, nullptr);
+
+    // Cleanup semaphores (you must call `semctl` to remove semaphores)
+    semctl(SEM_KEY1, 0, IPC_RMID);
+    semctl(SEM_KEY2, 0, IPC_RMID);
+    semctl(SEM_KEY3, 0, IPC_RMID);
 }
 
 int main(int argc, char** argv)
@@ -118,30 +184,58 @@ int main(int argc, char** argv)
     }
 
     // Setup shared memory
-    struct shared_buffer* buffer;
-    // setupSharedMemory(MAX_BOUNDED_BUFFER_SIZE, &buffer);
-    int shmid = setupSharedMemory(MAX_BOUNDED_BUFFER_SIZE, &buffer);
-    initializeSemaphore(0);
-
-    // consumer(bounded_buffer_size, buffer);
-    pid_t pid = fork();
-    if (pid < 0) {
-        perror("Fork failed");
-        cleanupSharedMemory(shmid, buffer);
-        cleanupSemaphores();
+    key_t key = ftok("/tmp", 65);
+    if (key == -1) {
+        perror("ftok failed");
         exit(1);
-    } else if (pid == 0) {
-        // Child process: Consumer
-        consumer(bounded_buffer_size, buffer);
-        exit(0);
-    } else {
-        // Parent process: Wait for the consumer process to finish
-        wait(NULL);
-
-        // Cleanup resources
-        cleanupSharedMemory(shmid, buffer);
-        cleanupSemaphores();
     }
+
+    // Setup shared memory
+    // struct shared_buffer* buffer;
+    // setupSharedMemory(MAX_BOUNDED_BUFFER_SIZE, &buffer);
+    // int shmid = setupSharedMemory(MAX_BOUNDED_BUFFER_SIZE, &buffer);
+    // initializeSemaphore(0);
+    int shmID = shmget(key, sizeof(struct shared_buffer), 0644 | IPC_CREAT);
+
+     if (shmID == -1) {
+        perror("shmget failed");
+        exit(1);
+    }
+
+    shared_buffer* buffer = (shared_buffer*)shmat(shmID, nullptr, 0);
+    if (buffer == (void*)-1) {
+        perror("shmat failed");
+        exit(1);
+    }
+    // consumer(bounded_buffer_size, buffer);
+    // pid_t pid = fork();
+    // if (pid < 0) {
+    //     perror("Fork failed");
+    //     cleanupSharedMemory(shmid, buffer);
+    //     cleanupSemaphores();
+    //     exit(1);
+    // } else if (pid == 0) {
+    //     // Child process: Consumer
+    //     consumer(bounded_buffer_size, buffer);
+    //     exit(0);
+    // } else {
+    //     // Parent process: Wait for the consumer process to finish
+    //     wait(NULL);
+
+    //     // Cleanup resources
+    //     cleanupSharedMemory(shmid, buffer);
+    //     cleanupSemaphores();
+    // }
+
+   
+    // Start consuming
+
+    memset(buffer, 0, sizeof(shared_buffer));
+    consumer(bounded_buffer_size, buffer);
+
+    shmdt(buffer);
+     // Cleanup shared memory
+    // cleanup(shmID, buffer);
 
 return 0;
 }
