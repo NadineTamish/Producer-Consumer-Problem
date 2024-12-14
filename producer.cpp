@@ -72,21 +72,7 @@ void log_time(const char* message) {
     cerr << "[" << time_buffer << "] " << message << endl;
 }
 
-void sleep_using_clock_gettime(long milliseconds) {
-    struct timespec start, current;
-    long elapsed_ms = 0;
 
-    // Get the current time
-    clock_gettime(CLOCK_MONOTONIC, &start);
-
-    while (elapsed_ms < milliseconds) {
-        
-        clock_gettime(CLOCK_MONOTONIC, &current);
-
-        elapsed_ms = (current.tv_sec - start.tv_sec) * 1000 +
-                     (current.tv_nsec - start.tv_nsec) / 1000000;
-    }
-}
 
 void producer(Producer_ARGS args,struct shared_buffer* buffer)
 {
